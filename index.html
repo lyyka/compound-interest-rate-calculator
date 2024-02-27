@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Compound interest rate calculator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+
+<body>
+
+    <main class="w-[1170px] max-w-full mx-auto px-5">
+        <form class="flex flex-col gap-6 border rounded p-5 bg-slate-100 my-5">
+            <h1 class="text-3xl font-bold">Compound interest rate calculator</h1>
+            <div class="flex flex-col gap-2">
+                <label for="initialInvestment">1. Initial investment (€) <span class="text-red-400">*</span></label>
+                <input type="number" id="initialInvestment" class="border border-slate-400 rounded px-4 py-2" />
+                <p class="text-slate-400 text-sm">Total amount to available for investment at the beginning.</p>
+            </div>
+
+            <div class="flex flex-col gap-2">
+                <label for="monthlyInvestmentAddOn">2. Monthly contribution (€)</label>
+                <input type="number" id="monthlyInvestmentAddOn" class="border border-slate-400 rounded px-4 py-2" />
+                <p class="text-slate-400 text-sm">Optional amount to invest on top of the initial investment every
+                    month.</p>
+            </div>
+
+            <div class="flex flex-col gap-2">
+                <label for="investmentPeriodInYears">3. Investment period (years) <span
+                        class="text-red-400">*</span></label>
+                <select id="investmentPeriodInYears" class="border border-slate-400 rounded px-4 py-2">
+                    <option value="5">5</option>
+                    <option value="10">10</option>
+                    <option value="15">15</option>
+                    <option value="20">20</option>
+                    <option value="25">25</option>
+                    <option value="30">30</option>
+                </select>
+                <p class="text-slate-400 text-sm">Number of years the investment will take. Longer the investment lasts,
+                    bigger the outcome.</p>
+            </div>
+
+            <div class="flex flex-col gap-2">
+                <label for="interestRate">4. Interest rate (%) <span class="text-red-400">*</span></label>
+                <input type="number" id="interestRate" class="border border-slate-400 rounded px-4 py-2" />
+                <p class="text-slate-400 text-sm">Annual interest rate. Bigger the rate bigger the outcome.</p>
+            </div>
+
+            <div class="flex flex-col gap-2">
+                <label for="compound">5. Compound period <span class="text-red-400">*</span></label>
+                <select id="compound" class="border border-slate-400 rounded px-4 py-2">
+                    <option value="yearly">Yearly</option>
+                    <option value="half-yearly">Semiannually</option>
+                    <option value="quarterly">Quarterly</option>
+                    <option value="monthly">Monthly</option>
+                </select>
+                <p class="text-slate-400 text-sm">Period on which the compound interest is calculated. More frequent
+                    calculation means greater total outcome.</p>
+            </div>
+
+            <div x-data="{view: 'table'}">
+                <div class="flex gap-6">
+                    <button type="button" role="tab"
+                        class="w-full px-4 py-2 rounded bg-white border-black cursor-pointer"
+                        x-bind:class="{'bg-blue-300': view === 'table'}" @click="view='table';">Result</button>
+                    <button type="button" role="tab"
+                        class="w-full px-4 py-2 rounded bg-white border-black cursor-pointer"
+                        x-bind:class="{'bg-blue-300': view === 'chart'}" @click="view='chart';">Chart</button>
+                </div>
+
+                <div x-show="view === 'table'" class="p-5 rounded bg-white border mt-5">
+                    <p class="text-2xl font-bold text-center">
+                        Total amount at the end: <br>
+                        <span id="result"></span>
+                    </p>
+                </div>
+
+                <div x-show="view === 'chart'" class="p-5 rounded bg-white border mt-5">
+                    <canvas id="chart"></canvas>
+                </div>
+            </div>
+        </form>
+
+        <div class="flex justify-center my-5">
+            <a href="https://github.com/lyyka" target="_blank">
+                <img src="./logo.png" class="h-12" alt="Github logo icon" />
+            </a>
+        </div>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        window.addEventListener('DOMContentLoaded', () => {
+            const initialInvestment = document.querySelector('#initialInvestment');
+            const monthlyInvestmentAddOn = document.querySelector('#monthlyInvestmentAddOn');
+            const investmentPeriodInYears = document.querySelector('#investmentPeriodInYears');
+            const interestRate = document.querySelector('#interestRate');
+            const compound = document.querySelector('#compound');
+            const resultLbl = document.querySelector('#result');
+
+            initialInvestment.value = 10000;
+            monthlyInvestmentAddOn.value = 1000;
+            investmentPeriodInYears.value = 10;
+            interestRate.value = 5;
+            compound.value = 'yearly';
+
+            const ctx = document.querySelector('#chart');
+            let chart = null;
+
+            const strategies = {
+                yearly: {
+                    getCompoundTimesPerYear: () => 1,
+                    resultToLabels: (result) => {
+                        let currentYear = (new Date()).getFullYear();
+                        return result.map(e => currentYear + e.idx);
+                    },
+                },
+                'half-yearly': {
+                    getCompoundTimesPerYear: () => 2,
+                    resultToLabels: (result) => {
+                        let currentYear = (new Date()).getFullYear();
+                        return result.map(e => {
+                            if (e.idx % 2 === 1) {
+                                currentYear++;
+                                return `${currentYear} H1`;
+                            } else {
+                                return `${currentYear} H2`;
+                            }
+                        });
+                    },
+                },
+                quarterly: {
+                    getCompoundTimesPerYear: () => 4,
+                    resultToLabels: (result) => {
+                        let currentYear = (new Date()).getFullYear() + 1;
+                        return result.map(e => {
+                            const value = `${currentYear} Q${(e.idx - 1) % 4 + 1}`
+
+                            if (e.idx % 4 === 0) {
+                                currentYear++;
+                            }
+
+                            return value;
+                        });
+                    },
+                },
+                monthly: {
+                    getCompoundTimesPerYear: () => 12,
+                    resultToLabels: (result) => {
+                        let currentYear = (new Date()).getFullYear() + 1;
+                        return result.map(e => {
+                            const month = ((e.idx - 1) % 12 + 1).toString().padStart(2, '0');
+                            const value = `${month}.${currentYear}`
+
+                            if (e.idx % 12 === 0) {
+                                currentYear++;
+                            }
+
+                            return value;
+                        });
+                    },
+                }
+            }
+
+            const calculate = () => {
+                let compoundTimesPerYear = strategies[compound.value].getCompoundTimesPerYear();
+
+                let principal = Number(initialInvestment.value);
+                const addOnInvestmentInEachPeriod = Number(monthlyInvestmentAddOn.value) * (12 / compoundTimesPerYear);
+                const interestRateInEachPeriod = Number(interestRate.value) / compoundTimesPerYear;
+                const result = [];
+
+                for (let i = 0; i < investmentPeriodInYears.value * compoundTimesPerYear; i++) {
+                    principal = principal * (1 + (interestRateInEachPeriod / 100)) + addOnInvestmentInEachPeriod;
+                    result.push({
+                        principal: principal,
+                        idx: i + 1,
+                    });
+                }
+
+                // display lbl on front
+                resultLbl.innerHTML = '€ ' + (+result[result.length - 1].principal.toFixed(0)).toLocaleString();
+
+                // Chart view
+
+                // -- destroy previous instance if one exists
+                if (chart !== null) chart.destroy();
+
+                // -- construct labels for chart based on the compound period
+                let labels = strategies[compound.value].resultToLabels(result);
+
+                // -- create new chart instance
+                chart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: 'Total amount',
+                            data: result.map(e => e.principal),
+                            borderWidth: 1,
+                            borderColor: 'black'
+                        }]
+                    },
+                    options: {
+                        plugins: {
+                            legend: {
+                                display: false,
+                            }
+                        }
+                    }
+                });
+            }
+
+            calculate();
+
+            initialInvestment.addEventListener('change', calculate);
+            monthlyInvestmentAddOn.addEventListener('change', calculate);
+            investmentPeriodInYears.addEventListener('change', calculate);
+            interestRate.addEventListener('change', calculate);
+            compound.addEventListener('change', calculate);
+        });
+    </script>
+</body>
+
+</html>
